@@ -1,0 +1,15 @@
+# Virtual Environment
+venv/
+
+# Python Cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# COLMAP large binaries (we'll ignore the database files to keep Git fast)
+*.db

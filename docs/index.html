@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Visual Reconstruction Project Documentation - Week 2">
+    <title>Visual Reconstruction Project | Technical Docs</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Scroll Progress Bar -->
+    <div id="progress-container">
+        <div id="progress-bar"></div>
+    </div>
+
+    <main class="container">
+        <header class="header-section">
+            <div class="technical-meta">
+                <span class="label">ID: WK2-OBSERVATION</span>
+            </div>
+            <h1>VISUAL RECONSTRUCTION: REAL-TO-SIM</h1>
+            <p class="subtitle">Implementation documentation for the Week 2 learning plan.</p>
+        </header>
+
+        <article class="content-section">
+            <h2>1. Introduction</h2>
+            <div class="technical-meta">
+                <span class="label">TARGET: OBSERVATION LAYER</span>
+            </div>
+            <p>This document details my implementation of a Real-to-Sim observation layer for Week 2. I utilized photogrammetry techniques to reconstruct a 2D image dataset into a scaled 3D model, preparing the geometry for integration into a physics simulator.</p>
+        </article>
+
+        <article class="content-section">
+            <h2>2. Camera Calibration (Phase 1 & 2)</h2>
+            <div class="technical-meta">
+                <span class="label">LIB: OPENCV</span>
+                <span class="label">INPUT: 14 CALIB IMAGES</span>
+            </div>
+            <p>To eliminate lens distortion and prevent mathematical errors during 3D projection, I performed an intrinsic camera calibration. I printed a standard checkerboard pattern and captured 14 images from various angles.</p>
+            <div class="image-grid">
+                <div class="img-frame"><img src="assets/calib1.jpeg" alt="Calibration 1" loading="lazy"></div>
+                <div class="img-frame"><img src="assets/calib2.jpeg" alt="Calibration 2" loading="lazy"></div>
+            </div>
+            <p>Using OpenCV, I developed a Python script to detect the checkerboard corners, successfully extracting the camera matrix and distortion coefficients required for the reconstruction phase.</p>
+        </article>
+
+        <article class="content-section">
+            <h2>3. Data Collection (Phase 3)</h2>
+            <div class="technical-meta">
+                <span class="label">TARGET: RIGID OBJECT</span>
+                <span class="label">INPUT: 38 SCENE IMAGES</span>
+            </div>
+            <p>For the target reconstruction, I selected a highly textured LEGO block. To ensure the feature-matching algorithm had enough reference points, I placed the object on a handwritten notebook, providing dense background texture.</p>
+            <div class="image-grid single">
+                <div class="img-frame"><img src="assets/lego_scene.jpeg" alt="LEGO block scene" loading="lazy"></div>
+            </div>
+            <p>I captured a 360-degree orbital dataset consisting of 38 images. I also measured the physical length of the LEGO block (6.5 cm) and recorded it in a configuration file for later metric scaling.</p>
+        </article>
+
+        <article class="content-section">
+            <h2>4. 3D Reconstruction (Phase 4)</h2>
+            <div class="technical-meta">
+                <span class="label">LIB: PYCOLMAP</span>
+                <span class="label">OUTPUT: SPARSE POINT CLOUD</span>
+            </div>
+            <p>I implemented the Structure from Motion (SfM) pipeline using the PyCOLMAP library. I configured a Python script to execute three core algorithms sequentially:</p>
+            <ul>
+                <li><strong>Feature Extraction:</strong> Detecting unique keypoints across all 38 images.</li>
+                <li><strong>Feature Matching:</strong> Exhaustively matching keypoints to find overlapping visual data.</li>
+                <li><strong>Bundle Adjustment:</strong> Solving the nonlinear optimization problem to estimate camera poses and 3D point coordinates.</li>
+            </ul>
+            <p>The pipeline successfully registered 37 out of 38 images into a unified 3D space, generating a sparse point cloud containing 4,164 points.</p>
+        </article>
+
+        <article class="content-section">
+            <h2>5. Metric Scaling & Validation (Phase 5 & 6)</h2>
+            <div class="technical-meta">
+                <span class="label">MATH: SIM3D TRANSFORM</span>
+                <span class="label">ERROR: 0.95 PX</span>
+            </div>
+            <p>Since SfM reconstructs scenes in an arbitrary, dimensionless coordinate system, I developed a scaling script. It parses the 6.5 cm physical measurement, computes the relative scale factor, and applies a 3D Similarity Transform to all points and camera poses.</p>
+            <p>To mathematically validate my reconstruction, I wrote a reprojection script. It takes the newly generated 3D points and projects them back onto a 2D source image using the calculated Rotation matrix, Translation vector, and Camera intrinsic matrix.</p>
+            <div class="image-grid single">
+                <div class="img-frame"><img src="assets/reprojection.jpg" alt="Reprojection validation" loading="lazy"></div>
+            </div>
+            <p>The validation succeeded: the reprojected green dots aligned precisely with the physical object in the photograph, yielding a mean reprojection error of just 0.95 pixels.</p>
+        </article>
+
+        <article class="content-section">
+            <h2>6. Export for Simulation (Phase 7)</h2>
+            <div class="technical-meta">
+                <span class="label">FORMAT: PLY, URDF</span>
+                <span class="label">TARGET: PYBULLET / MUJOCO</span>
+            </div>
+            <p>As a final step to prepare the asset for robotics physics engines, I wrote an export module. This module parses the internal COLMAP binary structure and exports the geometry as a standard PLY point cloud.</p>
+            <p>Additionally, it generates a URDF (Unified Robot Description Format) XML file, allowing the geometry to be loaded dynamically into simulators like PyBullet or MuJoCo.</p>
+        </article>
+        
+        <footer class="footer">
+            <p>END OF FILE</p>
+        </footer>
+    </main>
+
+    <script>
+        window.onscroll = function() {
+            var winScroll = document.body.scrollTop || document.documentElement.scrollTop;
+            var height = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+            var scrolled = (winScroll / height) * 100;
+            document.getElementById("progress-bar").style.width = scrolled + "%";
+        };
+    </script>
+</body>
+</html>

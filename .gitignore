@@ -1,15 +1,22 @@
-# Virtual Environment
+# Python Environment
 venv/
-
-# Python Cache
 __pycache__/
 *.pyc
-*.pyo
-*.pyd
 
 # OS Files
 .DS_Store
 Thumbs.db
 
-# COLMAP large binaries (we'll ignore the database files to keep Git fast)
+# Datasets (Do not commit heavy images to Git)
+data/scene/*.jpeg
+data/scene/*.jpg
+data/scene/*.png
+data/scene_opensource/
+
+# COLMAP & 3D Output Binaries (Too heavy for Git)
 *.db
+*.bin
+*.ply
+*.obj
+outputs/
+outputs_opensource/

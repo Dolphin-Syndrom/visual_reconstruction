@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Visual Reconstruction Project Documentation - Week 2">
-    <title>Visual Reconstruction Project | Technical Docs</title>
+    <meta name="description" content="Visual Reconstruction Technical Documentation - Quantitative SfM and Real-to-Sim Pipeline">
+    <title>Visual Reconstruction Technical Docs</title>
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
 </head>
@@ -18,87 +18,286 @@
         <header class="header-section">
             <div class="technical-meta">
                 <span class="label">ID: WK2-OBSERVATION</span>
+                <span class="label">ENGINE: PYCOLMAP / OPENCV</span>
+                <span class="label">PRECISION: SUB-PIXEL</span>
             </div>
             <h1>VISUAL RECONSTRUCTION: REAL-TO-SIM</h1>
-            <p class="subtitle">Implementation documentation for the Week 2 learning plan.</p>
+            <p class="subtitle">Quantitative implementation report for camera calibration, 3D Structure from Motion, metric scaling, and physics engine export.</p>
         </header>
 
         <article class="content-section">
-            <h2>1. Introduction</h2>
+            <h2>1. System Architecture & Overview</h2>
             <div class="technical-meta">
-                <span class="label">TARGET: OBSERVATION LAYER</span>
+                <span class="label">PIPELINE: END-TO-END</span>
+                <span class="label">TARGET: SIMULATION READY</span>
             </div>
-            <p>This document details my implementation of a Real-to-Sim observation layer for Week 2. I utilized photogrammetry techniques to reconstruct a 2D image dataset into a scaled 3D model, preparing the geometry for integration into a physics simulator.</p>
+            <p>I built a Real-to-Sim observation pipeline designed to convert physical RGB images into mathematically calibrated, metric 3D assets suitable for robotic physics simulators (PyBullet / MuJoCo). The pipeline spans seven phases. Phases 1 through 7 (sparse reconstruction) are complete. Dense reconstruction remains planned.</p>
+            <ul>
+                <li><strong>Phase 1 & 2: Camera Calibration</strong> — Intrinsic parameter extraction and lens distortion modeling using OpenCV. <em>[Complete]</em></li>
+                <li><strong>Phase 3: Scene Data Capture</strong> — Controlled orbital image collection of target geometry with textured ground references. <em>[Complete]</em></li>
+                <li><strong>Phase 4A: Sparse Structure from Motion (SfM)</strong> — SIFT feature extraction, exhaustive matching, and non-linear bundle adjustment via PyCOLMAP. <em>[Complete]</em></li>
+                <li><strong>Phase 4B: Dense Multi-View Stereo (MVS)</strong> — PatchMatch depth estimation and stereo fusion for solid geometry. <em>[Planned — requires CUDA GPU]</em></li>
+                <li><strong>Phase 5: Metric Scale Alignment</strong> — Similarity transformation (Sim3d) mapping arbitrary SfM units to real-world centimeters. <em>[Complete]</em></li>
+                <li><strong>Phase 6: Geometric Validation</strong> — Reprojection verification calculating pixel residual errors. <em>[Complete]</em></li>
+                <li><strong>Phase 7: Asset Export</strong> — Sparse point cloud (.ply) and URDF XML generator for simulation engines. <em>[Complete]</em></li>
+            </ul>
         </article>
 
         <article class="content-section">
             <h2>2. Camera Calibration (Phase 1 & 2)</h2>
             <div class="technical-meta">
                 <span class="label">LIB: OPENCV</span>
-                <span class="label">INPUT: 14 CALIB IMAGES</span>
+                <span class="label">GRID: 19x6 (114 CORNERS/FRAME)</span>
+                <span class="label">INPUT: 14 IMAGES</span>
+                <span class="label">RMS ERROR: 0.4100 PX</span>
             </div>
-            <p>To eliminate lens distortion and prevent mathematical errors during 3D projection, I performed an intrinsic camera calibration. I printed a standard checkerboard pattern and captured 14 images from various angles.</p>
+            <p>To eliminate optical distortion and establish an accurate pinhole projection model, I conducted camera calibration using a planar checkerboard target. The physical target comprised 19 horizontal by 6 vertical internal corners, yielding 114 corner intersections per frame.</p>
+
             <div class="image-grid">
-                <div class="img-frame"><img src="assets/calib1.jpeg" alt="Calibration 1" loading="lazy"></div>
-                <div class="img-frame"><img src="assets/calib2.jpeg" alt="Calibration 2" loading="lazy"></div>
+                <div class="img-frame"><img src="assets/calib1.jpeg" alt="Calibration sample 1" loading="lazy"></div>
+                <div class="img-frame"><img src="assets/calib2.jpeg" alt="Calibration sample 2" loading="lazy"></div>
             </div>
-            <p>Using OpenCV, I developed a Python script to detect the checkerboard corners, successfully extracting the camera matrix and distortion coefficients required for the reconstruction phase.</p>
+
+            <p>I captured 14 calibration frames spanning varied orientations (pitch, roll, yaw) and working distances. Keypoint corners were detected using <code>cv2.findChessboardCorners()</code> and refined to sub-pixel accuracy with <code>cv2.cornerSubPix()</code> using an 11x11 pixel search window (termination criteria: 30 iterations or ε = 0.001).</p>
+
+            <p>Using <code>cv2.calibrateCamera()</code>, I solved for the 3x3 Intrinsic Matrix (K) and the 5-parameter Brown-Conrady distortion vector:</p>
+
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Intrinsic Parameter</th>
+                        <th>Symbol</th>
+                        <th>Calculated Value</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Focal Length X</td>
+                        <td>f<sub>x</sub></td>
+                        <td>1798.07 px</td>
+                    </tr>
+                    <tr>
+                        <td>Focal Length Y</td>
+                        <td>f<sub>y</sub></td>
+                        <td>1796.71 px</td>
+                    </tr>
+                    <tr>
+                        <td>Principal Point X</td>
+                        <td>c<sub>x</sub></td>
+                        <td>425.90 px</td>
+                    </tr>
+                    <tr>
+                        <td>Principal Point Y</td>
+                        <td>c<sub>y</sub></td>
+                        <td>139.72 px</td>
+                    </tr>
+                    <tr>
+                        <td>Radial Distortion 1 / 2 / 3</td>
+                        <td>k<sub>1</sub>, k<sub>2</sub>, k<sub>3</sub></td>
+                        <td>-0.75594, 1.54149, -1.26780</td>
+                    </tr>
+                    <tr>
+                        <td>Tangential Distortion 1 / 2</td>
+                        <td>p<sub>1</sub>, p<sub>2</sub></td>
+                        <td>0.00903, 0.00548</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <pre><code># Camera Intrinsic Matrix K
+[ 1798.0695     0.0000   425.9015 ]
+[    0.0000  1796.7101   139.7152 ]
+[    0.0000     0.0000     1.0000 ]</code></pre>
+
+            <p>The calibration achieved a global Root Mean Square (RMS) reprojection error of <strong>0.4100 pixels</strong>, confirming high sub-pixel precision and ensuring minimal optical bias for downstream 3D reconstruction.</p>
         </article>
 
         <article class="content-section">
             <h2>3. Data Collection (Phase 3)</h2>
             <div class="technical-meta">
-                <span class="label">TARGET: RIGID OBJECT</span>
-                <span class="label">INPUT: 38 SCENE IMAGES</span>
+                <span class="label">TARGET: RIGID LEGO BLOCK</span>
+                <span class="label">DATASET: 38 IMAGES</span>
+                <span class="label">REF SCALE: 6.5 CM</span>
             </div>
-            <p>For the target reconstruction, I selected a highly textured LEGO block. To ensure the feature-matching algorithm had enough reference points, I placed the object on a handwritten notebook, providing dense background texture.</p>
+            <p>For the 3D target, I selected a rigid LEGO block. To prevent feature track loss caused by homogeneous untextured surfaces, I positioned the object on a handwritten notebook, introducing high-frequency visual background context.</p>
+
             <div class="image-grid single">
-                <div class="img-frame"><img src="assets/lego_scene.jpeg" alt="LEGO block scene" loading="lazy"></div>
+                <div class="img-frame"><img src="assets/lego_scene.jpeg" alt="LEGO object orbital scene" loading="lazy"></div>
             </div>
-            <p>I captured a 360-degree orbital dataset consisting of 38 images. I also measured the physical length of the LEGO block (6.5 cm) and recorded it in a configuration file for later metric scaling.</p>
+
+            <p>I collected 38 orbital images around the object at approximately 10-degree increments, maintaining 70-80% visual overlap across adjacent frames. I recorded the primary physical length of the LEGO object (<strong>6.5 cm / 0.065 m</strong>) in <code>data/scene/measurement.txt</code> as the ground truth scale anchor.</p>
         </article>
 
         <article class="content-section">
-            <h2>4. 3D Reconstruction (Phase 4)</h2>
+            <h2>4. 3D Structure from Motion (Phase 4)</h2>
             <div class="technical-meta">
                 <span class="label">LIB: PYCOLMAP</span>
-                <span class="label">OUTPUT: SPARSE POINT CLOUD</span>
+                <span class="label">MATCHING: EXHAUSTIVE (703 PAIRS)</span>
+                <span class="label">REGISTERED: 37/38 (97.4%)</span>
+                <span class="label">SPARSE POINTS: 4,164</span>
             </div>
-            <p>I implemented the Structure from Motion (SfM) pipeline using the PyCOLMAP library. I configured a Python script to execute three core algorithms sequentially:</p>
+            <p>I implemented the sparse photogrammetry reconstruction script using <code>PyCOLMAP</code>. The algorithm proceeded in three sequential computational steps:</p>
             <ul>
-                <li><strong>Feature Extraction:</strong> Detecting unique keypoints across all 38 images.</li>
-                <li><strong>Feature Matching:</strong> Exhaustively matching keypoints to find overlapping visual data.</li>
-                <li><strong>Bundle Adjustment:</strong> Solving the nonlinear optimization problem to estimate camera poses and 3D point coordinates.</li>
+                <li><strong>SIFT Feature Extraction:</strong> Extracted an average of ~7,024 keypoints per image frame, totaling over 260,000 distinct feature descriptors across the dataset.</li>
+                <li><strong>Exhaustive Feature Matching:</strong> Evaluated all C(38, 2) = 703 image pairs to construct robust feature tracks with epipolar geometry verification.</li>
+                <li><strong>Incremental Mapping & Bundle Adjustment:</strong> Estimated camera extrinsics (Rotation R, Translation t) while triangulating 3D point positions via Levenberg-Marquardt non-linear optimization.</li>
             </ul>
-            <p>The pipeline successfully registered 37 out of 38 images into a unified 3D space, generating a sparse point cloud containing 4,164 points.</p>
+
+            <div class="image-grid single">
+                <div class="img-frame"><img src="assets/open3d.jpeg" alt="Open3D Sparse Point Cloud Visualization" loading="lazy"></div>
+            </div>
+
+            <p><strong>Technical Analysis of Open3D Model Visualization:</strong></p>
+            <p>When rendering the sparse point cloud in Open3D (shown above), the visualization appears as a loose, floating constellation of keypoints rather than a solid 3D LEGO block. This geometric appearance is expected at the sparse SfM stage due to three fundamental computer vision factors:</p>
+            <ul>
+                <li><strong>Texture-Dependent SIFT Extraction:</strong> SIFT keypoint detection relies on second-order spatial intensity gradients (corners and high-contrast lines). The solid plastic faces of the LEGO block are monochromatic and smooth, lacking texture gradients. Consequently, the majority of the 4,164 triangulated points were extracted from the surrounding handwritten notebook text and object boundary edges rather than the flat interior faces.</li>
+                <li><strong>Sparse Landmark Triangulation vs. Continuous Surface Geometry:</strong> Structure from Motion solves only for keypoint landmark positions $(X, Y, Z)$ to recover camera poses. It does not compute surface connectivity, normal vectors, or solid polygon faces ($V, F$).</li>
+                <li><strong>Absence of Dense PatchMatch Stereo & Mesh Reconstruction:</strong> Converting this point cloud into a realistic, solid 3D asset requires Multi-View Stereo (MVS) depth map fusion followed by Poisson Surface Reconstruction or TSDF Volumetric Integration. This dense processing phase is scheduled for execution on the CUDA-accelerated GPU workstation.</li>
+            </ul>
+
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Metric</th>
+                        <th>Target Value</th>
+                        <th>Observed Metric</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Total Source Images</td>
+                        <td>38</td>
+                        <td>38 images</td>
+                    </tr>
+                    <tr>
+                        <td>Successfully Registered Images</td>
+                        <td>> 90%</td>
+                        <td>37 images (97.37%)</td>
+                    </tr>
+                    <tr>
+                        <td>Sparse 3D Point Cloud Count</td>
+                        <td>> 2,000</td>
+                        <td>4,164 3D points</td>
+                    </tr>
+                    <tr>
+                        <td>Average Features / Image</td>
+                        <td>> 5,000</td>
+                        <td>7,024 keypoints</td>
+                    </tr>
+                </tbody>
+            </table>
+
         </article>
 
         <article class="content-section">
             <h2>5. Metric Scaling & Validation (Phase 5 & 6)</h2>
             <div class="technical-meta">
-                <span class="label">MATH: SIM3D TRANSFORM</span>
-                <span class="label">ERROR: 0.95 PX</span>
+                <span class="label">TRANSFORM: SIM3D</span>
+                <span class="label">SCALE FACTOR: 1.3803</span>
+                <span class="label">REPROJECTION ERROR: 0.9624 PX</span>
             </div>
-            <p>Since SfM reconstructs scenes in an arbitrary, dimensionless coordinate system, I developed a scaling script. It parses the 6.5 cm physical measurement, computes the relative scale factor, and applies a 3D Similarity Transform to all points and camera poses.</p>
-            <p>To mathematically validate my reconstruction, I wrote a reprojection script. It takes the newly generated 3D points and projects them back onto a 2D source image using the calculated Rotation matrix, Translation vector, and Camera intrinsic matrix.</p>
+            <p>Structure from Motion computes point coordinates in an uncalibrated, arbitrary scale space. To convert the reconstruction into true metric dimensions, I calculated the Euclidean distance between reference camera poses in COLMAP space (4.7091 arbitrary units) and solved for the scale transformation:</p>
+
+            <pre><code>Scale Factor = Physical Measurement (6.5 cm) / COLMAP Distance (4.7091)
+Scale Factor = 1.3803 cm / unit</code></pre>
+
+            <p>Using <code>pycolmap.Sim3d()</code>, I applied a 7-DOF Similarity Transformation to scale all point coordinates and camera translation vectors uniformly.</p>
+
+            <p>To evaluate geometric precision, I wrote a reprojection validation script based on the pinhole projection equations:</p>
+
+            <pre><code>P_camera = R * P_world + t
+[x', y']^T = [P_camera.x / P_camera.z,  P_camera.y / P_camera.z]^T
+u = f_x * x' + c_x
+v = f_y * y' + c_y</code></pre>
+
             <div class="image-grid single">
-                <div class="img-frame"><img src="assets/reprojection.jpg" alt="Reprojection validation" loading="lazy"></div>
+                <div class="img-frame"><img src="assets/reprojection.jpg" alt="Reprojection validation result" loading="lazy"></div>
             </div>
-            <p>The validation succeeded: the reprojected green dots aligned precisely with the physical object in the photograph, yielding a mean reprojection error of just 0.95 pixels.</p>
+
+            <p>I selected the source image with the highest number of observed 3D correspondences (765 visible 3D points) and reprojected their world coordinates back onto the 2D frame. The reprojected coordinates (green dots with white outlines) overlay the physical features in the photograph.</p>
+
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Reprojection Statistic</th>
+                        <th>Value</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Points Reprojected</td>
+                        <td>765</td>
+                    </tr>
+                    <tr>
+                        <td>Mean Error</td>
+                        <td>0.9624 px</td>
+                    </tr>
+                    <tr>
+                        <td>Median Error</td>
+                        <td>0.7849 px</td>
+                    </tr>
+                    <tr>
+                        <td>Max Error</td>
+                        <td>4.0059 px</td>
+                    </tr>
+                    <tr>
+                        <td>Points &lt; 1.0 px error</td>
+                        <td>477 / 765 (62.4%)</td>
+                    </tr>
+                    <tr>
+                        <td>Points &lt; 2.0 px error</td>
+                        <td>700 / 765 (91.5%)</td>
+                    </tr>
+                </tbody>
+            </table>
         </article>
 
         <article class="content-section">
-            <h2>6. Export for Simulation (Phase 7)</h2>
+            <h2>6. Dense Reconstruction (Planned — Phase 4B)</h2>
             <div class="technical-meta">
-                <span class="label">FORMAT: PLY, URDF</span>
-                <span class="label">TARGET: PYBULLET / MUJOCO</span>
+                <span class="label">STATUS: PLANNED</span>
+                <span class="label">ALGO: PATCHMATCH STEREO</span>
+                <span class="label">REQUIRES: CUDA GPU</span>
             </div>
-            <p>As a final step to prepare the asset for robotics physics engines, I wrote an export module. This module parses the internal COLMAP binary structure and exports the geometry as a standard PLY point cloud.</p>
-            <p>Additionally, it generates a URDF (Unified Robot Description Format) XML file, allowing the geometry to be loaded dynamically into simulators like PyBullet or MuJoCo.</p>
+            <p>The sparse SfM output (4,164 points) recovers camera poses and key landmark positions but does not produce solid surface geometry. Physical simulation requires a dense mesh. To address this, I wrote <code>run_dense_reconstruction.py</code> which implements the following three-step MVS pipeline:</p>
+            <ul>
+                <li><strong>Image Undistortion:</strong> Re-samples raw input images using intrinsic matrix K and distortion coefficients to generate undistorted pinhole images.</li>
+                <li><strong>PatchMatch Stereo:</strong> Computes pixel-wise depth maps and normal maps by optimizing photometric consistency across overlapping views.</li>
+                <li><strong>Stereo Fusion:</strong> Filters low-confidence depth estimates and fuses depth maps into a single dense colored point cloud (<code>fused.ply</code>).</li>
+            </ul>
+            <p>I attempted to run this phase on my local CPU-only machine but <code>pycolmap.patch_match_stereo()</code> requires a CUDA or HIP GPU and failed immediately. The script is prepared and tested up to the point of GPU invocation. I plan to execute it on a separate workstation equipped with an NVIDIA RTX 5070 Ti GPU. This phase has not yet been run.</p>
         </article>
-        
+
+        <article class="content-section">
+            <h2>7. Simulation Export (Phase 7)</h2>
+            <div class="technical-meta">
+                <span class="label">FORMAT: PLY / URDF</span>
+                <span class="label">TARGET SIM: PYBULLET / MUJOCO</span>
+                <span class="label">STATUS: SPARSE EXPORT COMPLETE</span>
+            </div>
+            <p>I authored an export script (<code>export_scene.py</code>) that parses the COLMAP binary structures from the scaled reconstruction and converts them into standard simulation-ready assets:</p>
+            <ul>
+                <li><code>outputs/export/scene_scaled.ply</code>: Metric-scaled 3D point cloud containing 4,164 vertices with RGB color and XYZ coordinates in centimeters.</li>
+                <li><code>outputs/export/scene.urdf</code>: A URDF (Unified Robot Description Format) XML file that references the PLY mesh and defines a base link with visual and collision geometry for loading into PyBullet or MuJoCo.</li>
+            </ul>
+            <p>This export is based on the sparse point cloud. Once the dense reconstruction (Phase 4B) is completed on the GPU workstation, I will re-export with the dense <code>fused.ply</code> mesh for higher-fidelity simulation geometry.</p>
+        </article>
+
+        <article class="content-section">
+            <h2>8. Next Steps</h2>
+            <div class="technical-meta">
+                <span class="label">STATUS: IN PROGRESS</span>
+            </div>
+            <ul>
+                <li>Execute <code>run_dense_reconstruction.py</code> on the NVIDIA RTX 5070 Ti workstation to generate the dense point cloud via PatchMatch Stereo and Stereo Fusion.</li>
+                <li>Re-export the dense <code>fused.ply</code> mesh and update the URDF file for simulation integration.</li>
+                <li>Evaluate the dense reconstruction quality by comparing point count, surface coverage, and visual fidelity against the sparse baseline.</li>
+                <li>Load the final URDF asset into a PyBullet or MuJoCo simulation environment and verify physical interaction (gravity, collision).</li>
+            </ul>
+        </article>
+
         <footer class="footer">
-            <p>END OF FILE</p>
+            <p>END OF TECHNICAL DOCUMENTATION</p>
         </footer>
     </main>
 

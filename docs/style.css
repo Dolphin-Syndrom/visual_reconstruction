@@ -153,6 +153,47 @@ strong {
     filter: grayscale(20%);
 }
 
+/* Code & Data Tables */
+code, pre {
+    font-family: 'Fira Code', monospace;
+    font-size: 0.85rem;
+}
+
+pre {
+    background: #111111;
+    border: 1px solid var(--border-color);
+    padding: 1rem;
+    overflow-x: auto;
+    margin: 1.5rem 0;
+    color: #d4d4d4;
+    line-height: 1.5;
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.5rem 0;
+    font-family: 'Fira Code', monospace;
+    font-size: 0.85rem;
+}
+
+.data-table th, .data-table td {
+    border: 1px solid var(--border-color);
+    padding: 0.6rem 0.8rem;
+    text-align: left;
+}
+
+.data-table th {
+    background: #141414;
+    color: var(--accent);
+    font-weight: 500;
+}
+
+.data-table td {
+    background: #0d0d0d;
+    color: var(--text-main);
+}
+
 /* Footer */
 .footer {
     border-top: 1px dashed var(--border-color);
@@ -166,3 +207,4 @@ strong {
     font-size: 0.85rem;
     color: var(--text-muted);
 }
+

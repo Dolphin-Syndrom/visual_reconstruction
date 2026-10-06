@@ -20,3 +20,8 @@ data/scene_opensource/
 *.obj
 outputs/
 outputs_opensource/
+
+# Open3D Interactive Viewer Captures
+ScreenCamera_*.json
+ScreenCapture_*.png
+

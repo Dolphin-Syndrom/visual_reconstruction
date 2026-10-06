@@ -3,11 +3,15 @@ from pathlib import Path
 
 def view_cloud():
     print("--- 3D Viewer ---")
-    ply_path = Path("../outputs/export/scene_scaled.ply")
+    script_dir = Path(__file__).resolve().parent
+    ply_path = script_dir / "../outputs/export/scene_scaled.ply"
+    if not ply_path.exists():
+        ply_path = Path("outputs/export/scene_scaled.ply")
     
     if not ply_path.exists():
-        print(f"File not found: {ply_path}")
+        print(f"File not found at: {ply_path.resolve()}")
         return
+
         
     print(f"Loading Point Cloud: {ply_path.name}")
     

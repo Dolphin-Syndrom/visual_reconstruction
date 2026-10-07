@@ -81,14 +81,24 @@ def run_dense():
     
     fused_ply_path = dense_dir / "fused.ply"
     try:
-        # pycolmap-cuda12 requires output_path to be a directory.
-        # It will automatically write 'fused.ply' inside this directory 
-        # and then successfully pass its internal ExistsDir() check.
-        pycolmap.stereo_fusion(
+        # Pass dense_dir to satisfy ExistsDir, then manually export PLY
+        recon = pycolmap.stereo_fusion(
             output_path=str(dense_dir),
             workspace_path=str(dense_dir),
         )
         print("Stereo Fusion complete via pycolmap!")
+        
+        # Depending on pycolmap version, it either returns the Reconstruction
+        # or saves it as bin files in the output directory.
+        if recon is not None and hasattr(recon, 'export_PLY'):
+            recon.export_PLY(str(fused_ply_path))
+        elif (dense_dir / "points3D.bin").exists():
+            print("Loading saved reconstruction to export PLY...")
+            recon = pycolmap.Reconstruction(dense_dir)
+            recon.export_PLY(str(fused_ply_path))
+        else:
+            print("WARNING: Could not automatically export PLY. Attempting fallback.")
+            
     except Exception as e:
         if colmap_bin:
             print(f"Attempting Stereo Fusion via system COLMAP CLI...")

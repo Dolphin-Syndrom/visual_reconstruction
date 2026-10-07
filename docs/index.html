@@ -262,9 +262,9 @@ v = f_y * y' + c_y</code></pre>
             </div>
             <p>The sparse SfM output successfully recovered camera poses but yielded a highly scattered point cloud unsuitable for solid physics geometry. To address this, I executed <code>run_dense_reconstruction.py</code> on a dedicated GPU workstation. The dense Multi-View Stereo (MVS) pipeline involves:</p>
             <ul>
-                <li><strong>Image Undistortion:</strong> Re-sampling raw input images to generate ideal pinhole models.</li>
-                <li><strong>PatchMatch Stereo:</strong> Optimizing photometric consistency across overlapping views to compute pixel-wise depth maps.</li>
-                <li><strong>Stereo Fusion:</strong> Fusing these depth maps into a dense 3D point cloud.</li>
+                <li><strong>Image Undistortion:</strong> Re-sampling raw input images using the previously solved intrinsic matrix (K) and radial/tangential distortion coefficients to generate ideal pinhole models. This is mathematically strictly required for linear epipolar search.</li>
+                <li><strong>PatchMatch Stereo:</strong> A highly parallelized algorithm that computes pixel-wise depth and normal maps. It relies on optimizing photometric consistency (typically Normalized Cross-Correlation, NCC) across local windows in overlapping views. PatchMatch propagates high-confidence depth plane estimates spatially to neighboring pixels, drastically reducing the exhaustive search space.</li>
+                <li><strong>Stereo Fusion:</strong> Enforces geometric consistency by cross-checking depth maps from multiple views. Outliers and occluded pixels are filtered out if their depth estimates disagree beyond a threshold, while consistent estimates are fused via a median depth computation into a unified 3D point cloud.</li>
             </ul>
 
             <h3>Execution Failures & Engineering Resolutions</h3>
@@ -276,18 +276,22 @@ v = f_y * y' + c_y</code></pre>
 
             <h3>Visual Results: Sparse vs. Dense</h3>
             
-            <div class="image-grid">
+            <div class="image-grid vertical">
                 <div class="img-frame">
                     <img src="assets/sparse_2455.png" alt="Sparse Reconstruction (2,455 points)" loading="lazy">
-                    <p style="text-align:center; font-size: 0.85rem; margin-top: 0.5rem; opacity: 0.8;">Sparse SfM: 2,455 points</p>
+                    <p style="text-align:center; font-size: 0.85rem; margin-top: 0.5rem; opacity: 0.8;">Sparse SfM: 2,455 points (Scattered features)</p>
                 </div>
                 <div class="img-frame">
                     <img src="assets/dense_114675.png" alt="Dense Reconstruction (114,675 points)" loading="lazy">
-                    <p style="text-align:center; font-size: 0.85rem; margin-top: 0.5rem; opacity: 0.8;">Dense MVS: 114,675 points</p>
+                    <p style="text-align:center; font-size: 0.85rem; margin-top: 0.5rem; opacity: 0.8;">Dense MVS: 114,675 points (Dark background)</p>
+                </div>
+                <div class="img-frame">
+                    <img src="assets/open3d_dense.png" alt="Dense Reconstruction Open3D View" loading="lazy">
+                    <p style="text-align:center; font-size: 0.85rem; margin-top: 0.5rem; opacity: 0.8;">Dense MVS: Open3D Renderer (Clear structural volume)</p>
                 </div>
             </div>
 
-            <p>The transition from sparse to dense was mathematically successful. The sparse cloud (left) captured only 2,455 scattered high-contrast edges. By computing depth per-pixel across the GPU, the dense MVS fusion (right) generated <strong>114,675 points</strong>, recovering the physical volume and color distribution of the LEGO target.</p>
+            <p>The transition from sparse tracking to dense geometric modeling yielded orders of magnitude more spatial data. The sparse cloud (top) captured only <strong>2,455 points</strong>, primarily consisting of high-contrast background noise and sharp silhouette edges, entirely failing to model the flat LEGO surfaces. By deploying thousands of concurrent CUDA threads to execute the PatchMatch cost-volume optimization per-pixel, the dense MVS fusion successfully triangulated <strong>114,675 points</strong> (middle and bottom), accurately recovering both the volumetric bounding box and the true RGB color distribution of the solid object.</p>
         </article>
 
         <article class="content-section">
@@ -297,9 +301,11 @@ v = f_y * y' + c_y</code></pre>
                 <span class="label">ALGO: POISSON MESHING (DEPTH=9)</span>
                 <span class="label">OUTPUT: SOLID TRIANGLE MESH</span>
             </div>
-            <p>Despite the dense cloud generating 114,675 points, the physical material of the LEGO block—shiny, uniform, textureless plastic—presents fundamental challenges to Multi-View Stereo, resulting in surface holes and missing data points where specular reflections confused depth calculations.</p>
+            <p>Despite generating a dense point cloud of 114,675 vertices, the raw physical material of the LEGO block—shiny, uniform, textureless plastic—presents an intractable fundamental challenge to passive Multi-View Stereo. Regions lacking spatial texture gradients cannot reliably match photometrically across views. Furthermore, specular highlights (reflections) violate the Lambertian reflectance assumption inherent in standard MVS, resulting in geometric voids (holes) and noisy extrusions where the algorithm was mathematically blinded.</p>
             
-            <p>To convert the point cloud into a solid, continuous physical object for the simulator, I implemented <strong>Poisson Surface Reconstruction</strong> using Open3D. The algorithm estimates surface normals using K-Nearest Neighbors (KNN=50) and wraps a continuous mathematical "skin" (triangle mesh) over the data at an octree depth of 9.</p>
+            <p>To transition from an incomplete point cloud to a mathematically closed physical boundary representation for the simulator, I implemented <strong>Poisson Surface Reconstruction</strong> using the Open3D computational geometry library. This algorithm formulates the surface fitting problem as solving a spatial Poisson equation (<code>∇ ⋅ ∇ χ = ∇ ⋅ V</code>), where the reconstructed surface acts as an indicator function whose gradient best matches an input vector field.</p>
+            
+            <p>To establish this vector field, I first estimated robust surface normals for all 114k points utilizing a KD-Tree search architecture (K-Nearest Neighbors, K=50) to compute local covariance matrices and their corresponding eigenvectors. The Poisson algorithm then wrapped a continuous mathematical "skin" over the oriented points utilizing an adaptive octree grid at <strong>Depth=9</strong>. At depth 9, the bounding volume is partitioned into a high-resolution <code>2^9 × 2^9 × 2^9</code> (512³) voxel grid, allowing fine detail preservation while effectively bridging the specular voids.</p>
 
             <div class="image-grid single">
                 <div class="img-frame"><img src="assets/poisson_mesh.png" alt="Poisson Surface Mesh" loading="lazy"></div>

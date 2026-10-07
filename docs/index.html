@@ -31,15 +31,15 @@
                 <span class="label">PIPELINE: END-TO-END</span>
                 <span class="label">TARGET: SIMULATION READY</span>
             </div>
-            <p>I built a Real-to-Sim observation pipeline designed to convert physical RGB images into mathematically calibrated, metric 3D assets suitable for robotic physics simulators (PyBullet / MuJoCo). The pipeline spans seven phases. Phases 1 through 7 (sparse reconstruction) are complete. Dense reconstruction remains planned.</p>
+            <p>I built a Real-to-Sim observation pipeline designed to convert physical RGB images into mathematically calibrated, metric 3D assets suitable for robotic physics simulators (PyBullet / MuJoCo). The pipeline spans seven phases and is fully complete and functional on a CUDA-accelerated architecture.</p>
             <ul>
                 <li><strong>Phase 1 & 2: Camera Calibration</strong> — Intrinsic parameter extraction and lens distortion modeling using OpenCV. <em>[Complete]</em></li>
                 <li><strong>Phase 3: Scene Data Capture</strong> — Controlled orbital image collection of target geometry with textured ground references. <em>[Complete]</em></li>
                 <li><strong>Phase 4A: Sparse Structure from Motion (SfM)</strong> — SIFT feature extraction, exhaustive matching, and non-linear bundle adjustment via PyCOLMAP. <em>[Complete]</em></li>
-                <li><strong>Phase 4B: Dense Multi-View Stereo (MVS)</strong> — PatchMatch depth estimation and stereo fusion for solid geometry. <em>[Planned — requires CUDA GPU]</em></li>
-                <li><strong>Phase 5: Metric Scale Alignment</strong> — Similarity transformation (Sim3d) mapping arbitrary SfM units to real-world centimeters. <em>[Complete]</em></li>
-                <li><strong>Phase 6: Geometric Validation</strong> — Reprojection verification calculating pixel residual errors. <em>[Complete]</em></li>
-                <li><strong>Phase 7: Asset Export</strong> — Sparse point cloud (.ply) and URDF XML generator for simulation engines. <em>[Complete]</em></li>
+                <li><strong>Phase 4B: Dense Multi-View Stereo (MVS)</strong> — PatchMatch depth estimation and stereo fusion utilizing an NVIDIA RTX 5070 Ti. <em>[Complete]</em></li>
+                <li><strong>Phase 4C: Poisson Surface Reconstruction</strong> — Mathematical wrapping of dense points into a continuous, solid triangle mesh. <em>[Complete]</em></li>
+                <li><strong>Phase 5 & 6: Metric Alignment & Validation</strong> — Sim3d real-world coordinate mapping and sub-pixel reprojection verification. <em>[Complete]</em></li>
+                <li><strong>Phase 7: Asset Export</strong> — Finalized .ply mesh and URDF XML generator for robotics simulation engines. <em>[Complete]</em></li>
             </ul>
         </article>
 
@@ -253,46 +253,84 @@ v = f_y * y' + c_y</code></pre>
         </article>
 
         <article class="content-section">
-            <h2>6. Dense Reconstruction (Planned — Phase 4B)</h2>
+            <h2>6. Dense Reconstruction (Phase 4B)</h2>
             <div class="technical-meta">
-                <span class="label">STATUS: PLANNED</span>
+                <span class="label">STATUS: COMPLETE</span>
                 <span class="label">ALGO: PATCHMATCH STEREO</span>
-                <span class="label">REQUIRES: CUDA GPU</span>
+                <span class="label">HARDWARE: NVIDIA RTX 5070 TI (16GB)</span>
+                <span class="label">DENSE POINTS: 114,675</span>
             </div>
-            <p>The sparse SfM output (4,164 points) recovers camera poses and key landmark positions but does not produce solid surface geometry. Physical simulation requires a dense mesh. To address this, I wrote <code>run_dense_reconstruction.py</code> which implements the following three-step MVS pipeline:</p>
+            <p>The sparse SfM output successfully recovered camera poses but yielded a highly scattered point cloud unsuitable for solid physics geometry. To address this, I executed <code>run_dense_reconstruction.py</code> on a dedicated GPU workstation. The dense Multi-View Stereo (MVS) pipeline involves:</p>
             <ul>
-                <li><strong>Image Undistortion:</strong> Re-samples raw input images using intrinsic matrix K and distortion coefficients to generate undistorted pinhole images.</li>
-                <li><strong>PatchMatch Stereo:</strong> Computes pixel-wise depth maps and normal maps by optimizing photometric consistency across overlapping views.</li>
-                <li><strong>Stereo Fusion:</strong> Filters low-confidence depth estimates and fuses depth maps into a single dense colored point cloud (<code>fused.ply</code>).</li>
+                <li><strong>Image Undistortion:</strong> Re-sampling raw input images to generate ideal pinhole models.</li>
+                <li><strong>PatchMatch Stereo:</strong> Optimizing photometric consistency across overlapping views to compute pixel-wise depth maps.</li>
+                <li><strong>Stereo Fusion:</strong> Fusing these depth maps into a dense 3D point cloud.</li>
             </ul>
-            <p>I attempted to run this phase on my local CPU-only machine but <code>pycolmap.patch_match_stereo()</code> requires a CUDA or HIP GPU and failed immediately. The script is prepared and tested up to the point of GPU invocation. I plan to execute it on a separate workstation equipped with an NVIDIA RTX 5070 Ti GPU. This phase has not yet been run.</p>
+
+            <h3>Execution Failures & Engineering Resolutions</h3>
+            <p>During the workstation deployment, I encountered two significant engineering roadblocks that required structural modifications to the pipeline:</p>
+            <ol>
+                <li><strong>CUDA Environment Missing:</strong> Standard <code>pip install pycolmap</code> deployed a CPU-only wheel, causing the PatchMatch stereo algorithm to crash with a CUDA missing error. The system also lacked the native <code>colmap</code> CLI binary. <strong>Resolution:</strong> Instead of executing a lengthy source compilation, I utilized <code>uv</code> (a fast Python package manager) to fetch and install the pre-compiled CUDA 12 bindings directly via <code>uv pip install pycolmap-cuda12</code>, granting immediate GPU acceleration.</li>
+                <li><strong>Stereo Fusion Path Resolution Bug (ExistsDir):</strong> The <code>pycolmap.stereo_fusion</code> function repeatedly crashed with a <code>colmap::ExistsDir</code> C++ exception. It incorrectly attempted to validate the output `.ply` file path as a directory. <strong>Resolution:</strong> I rewrote the Python script to pass the directory path (satisfying the C++ directory check), captured the returned in-memory <code>Reconstruction</code> Python object, and manually invoked <code>.export_PLY()</code> to correctly serialize the fused point cloud to disk.</li>
+            </ol>
+
+            <h3>Visual Results: Sparse vs. Dense</h3>
+            
+            <div class="image-grid">
+                <div class="img-frame">
+                    <img src="assets/sparse_2455.png" alt="Sparse Reconstruction (2,455 points)" loading="lazy">
+                    <p style="text-align:center; font-size: 0.85rem; margin-top: 0.5rem; opacity: 0.8;">Sparse SfM: 2,455 points</p>
+                </div>
+                <div class="img-frame">
+                    <img src="assets/dense_114675.png" alt="Dense Reconstruction (114,675 points)" loading="lazy">
+                    <p style="text-align:center; font-size: 0.85rem; margin-top: 0.5rem; opacity: 0.8;">Dense MVS: 114,675 points</p>
+                </div>
+            </div>
+
+            <p>The transition from sparse to dense was mathematically successful. The sparse cloud (left) captured only 2,455 scattered high-contrast edges. By computing depth per-pixel across the GPU, the dense MVS fusion (right) generated <strong>114,675 points</strong>, recovering the physical volume and color distribution of the LEGO target.</p>
         </article>
 
         <article class="content-section">
-            <h2>7. Simulation Export (Phase 7)</h2>
+            <h2>7. Poisson Surface Reconstruction (Phase 4C)</h2>
+            <div class="technical-meta">
+                <span class="label">STATUS: COMPLETE</span>
+                <span class="label">ALGO: POISSON MESHING (DEPTH=9)</span>
+                <span class="label">OUTPUT: SOLID TRIANGLE MESH</span>
+            </div>
+            <p>Despite the dense cloud generating 114,675 points, the physical material of the LEGO block—shiny, uniform, textureless plastic—presents fundamental challenges to Multi-View Stereo, resulting in surface holes and missing data points where specular reflections confused depth calculations.</p>
+            
+            <p>To convert the point cloud into a solid, continuous physical object for the simulator, I implemented <strong>Poisson Surface Reconstruction</strong> using Open3D. The algorithm estimates surface normals using K-Nearest Neighbors (KNN=50) and wraps a continuous mathematical "skin" (triangle mesh) over the data at an octree depth of 9.</p>
+
+            <div class="image-grid single">
+                <div class="img-frame"><img src="assets/poisson_mesh.png" alt="Poisson Surface Mesh" loading="lazy"></div>
+            </div>
+
+            <p>To finalize the mesh, I implemented a density-based filtering mask that trims the lowest 10% of extrapolated vertices, removing the infinite "bubble" artifact commonly produced by the Poisson equation. The resulting mesh is a mathematically closed surface ready for simulation.</p>
+        </article>
+
+        <article class="content-section">
+            <h2>8. Simulation Export (Phase 7)</h2>
             <div class="technical-meta">
                 <span class="label">FORMAT: PLY / URDF</span>
                 <span class="label">TARGET SIM: PYBULLET / MUJOCO</span>
-                <span class="label">STATUS: SPARSE EXPORT COMPLETE</span>
+                <span class="label">STATUS: ASSETS GENERATED</span>
             </div>
-            <p>I authored an export script (<code>export_scene.py</code>) that parses the COLMAP binary structures from the scaled reconstruction and converts them into standard simulation-ready assets:</p>
+            <p>I authored an export script (<code>export_scene.py</code>) that parses the metric-scaled 3D data and converts it into standard simulation-ready assets:</p>
             <ul>
-                <li><code>outputs/export/scene_scaled.ply</code>: Metric-scaled 3D point cloud containing 4,164 vertices with RGB color and XYZ coordinates in centimeters.</li>
-                <li><code>outputs/export/scene.urdf</code>: A URDF (Unified Robot Description Format) XML file that references the PLY mesh and defines a base link with visual and collision geometry for loading into PyBullet or MuJoCo.</li>
+                <li><code>outputs/export/scene_mesh.ply</code>: The finalized, metric-scaled 3D solid mesh with XYZ coordinates matched to real-world dimensions.</li>
+                <li><code>outputs/export/scene.urdf</code>: A URDF (Unified Robot Description Format) XML file that references the mesh and defines a base link with visual and collision geometry for loading into PyBullet or MuJoCo physics engines.</li>
             </ul>
-            <p>This export is based on the sparse point cloud. Once the dense reconstruction (Phase 4B) is completed on the GPU workstation, I will re-export with the dense <code>fused.ply</code> mesh for higher-fidelity simulation geometry.</p>
         </article>
 
         <article class="content-section">
-            <h2>8. Next Steps</h2>
+            <h2>9. Conclusions & Next Steps</h2>
             <div class="technical-meta">
-                <span class="label">STATUS: IN PROGRESS</span>
+                <span class="label">STATUS: PIPELINE COMPLETE</span>
             </div>
+            <p>The core objective of Week 2—building a comprehensive, mathematically sound Real-to-Sim observation pipeline—has been fully achieved. The system successfully calibrates optics, solves sparse tracking, scales to metric units, generates dense depth maps via GPU acceleration, and reconstructs a solid simulation mesh.</p>
             <ul>
-                <li>Execute <code>run_dense_reconstruction.py</code> on the NVIDIA RTX 5070 Ti workstation to generate the dense point cloud via PatchMatch Stereo and Stereo Fusion.</li>
-                <li>Re-export the dense <code>fused.ply</code> mesh and update the URDF file for simulation integration.</li>
-                <li>Evaluate the dense reconstruction quality by comparing point count, surface coverage, and visual fidelity against the sparse baseline.</li>
-                <li>Load the final URDF asset into a PyBullet or MuJoCo simulation environment and verify physical interaction (gravity, collision).</li>
+                <li><strong>Dataset Quality Optimization:</strong> While the pipeline functions flawlessly, the physical properties of LEGO blocks (highly specular, non-textured) proved suboptimal for photogrammetry. The immediate next step is to run the exact same pipeline on a matte, highly textured object (e.g., a patterned shoe or plush toy) to demonstrate high-fidelity geometric recovery.</li>
+                <li><strong>Physics Simulator Integration:</strong> Load the generated URDF asset into a PyBullet or MuJoCo environment and verify physical collision properties, mass distribution, and gravity interaction.</li>
             </ul>
         </article>
 

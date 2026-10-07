@@ -3,8 +3,9 @@ import pycolmap
 from pathlib import Path
 
 def run_sfm():
-    scene_dir = Path("../data/scene")
-    output_dir = Path("../outputs")
+    script_dir = Path(__file__).resolve().parent
+    scene_dir = (script_dir / "../data/scene").resolve()
+    output_dir = (script_dir / "../outputs").resolve()
     output_dir.mkdir(exist_ok=True)
     
     db_path = output_dir / "database.db"

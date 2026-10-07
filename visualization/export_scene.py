@@ -5,9 +5,12 @@ def export_scene_to_simulator():
     print("--- Phase 7: Visualization & Export ---")
     
     # 1. Define paths
-    sparse_scaled_dir = Path("../outputs/sparse_scaled")
-    output_dir = Path("../outputs/export")
-    output_dir.mkdir(exist_ok=True)
+    script_dir = Path(__file__).resolve().parent
+    sparse_scaled_dir = (script_dir / "../outputs/sparse_scaled/0").resolve()
+    if not sparse_scaled_dir.exists():
+        sparse_scaled_dir = (script_dir / "../outputs/sparse_scaled").resolve()
+    output_dir = (script_dir / "../outputs/export").resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
     
     ply_path = output_dir / "scene_scaled.ply"
     urdf_path = output_dir / "scene.urdf"

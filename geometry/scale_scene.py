@@ -4,10 +4,13 @@ from pathlib import Path
 
 def scale_reconstruction():
     # 1. Define paths
-    sparse_dir = Path("../outputs/sparse")
-    measurement_file = Path("../data/scene/measurement.txt")
-    scaled_dir = Path("../outputs/sparse_scaled")
-    scaled_dir.mkdir(exist_ok=True)
+    script_dir = Path(__file__).resolve().parent
+    sparse_dir = (script_dir / "../outputs/sparse/0").resolve()
+    if not sparse_dir.exists():
+        sparse_dir = (script_dir / "../outputs/sparse").resolve()
+    measurement_file = (script_dir / "../data/scene/measurement.txt").resolve()
+    scaled_dir = (script_dir / "../outputs/sparse_scaled").resolve()
+    scaled_dir.mkdir(parents=True, exist_ok=True)
     
     print("--- STEP 1: Loading Data ---")
     if not sparse_dir.exists():

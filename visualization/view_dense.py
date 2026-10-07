@@ -3,7 +3,8 @@ from pathlib import Path
 
 def view_dense():
     print("--- Dense 3D Viewer ---")
-    ply_path = Path("../outputs/dense/fused.ply")
+    script_dir = Path(__file__).resolve().parent
+    ply_path = (script_dir / "../outputs/dense/fused.ply").resolve()
     
     if not ply_path.exists():
         print(f"Dense point cloud not found at {ply_path}")

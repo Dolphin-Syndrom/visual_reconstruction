@@ -81,17 +81,14 @@ def run_dense():
     
     fused_ply_path = dense_dir / "fused.ply"
     try:
+        # pycolmap-cuda12 requires output_path to be a directory.
+        # It will automatically write 'fused.ply' inside this directory 
+        # and then successfully pass its internal ExistsDir() check.
         pycolmap.stereo_fusion(
-            output_path=str(fused_ply_path),
+            output_path=str(dense_dir),
             workspace_path=str(dense_dir),
         )
         print("Stereo Fusion complete via pycolmap!")
-    except ValueError as e:
-        if "ExistsDir" in str(e) and fused_ply_path.exists():
-            print("\n[NOTICE] Caught known pycolmap quirk (tries to use ply path as directory).")
-            print("Stereo Fusion actually succeeded!")
-        else:
-            raise e
     except Exception as e:
         if colmap_bin:
             print(f"Attempting Stereo Fusion via system COLMAP CLI...")

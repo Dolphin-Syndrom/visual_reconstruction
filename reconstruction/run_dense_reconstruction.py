@@ -20,14 +20,14 @@ def run_dense():
     print("Phase 4B: Dense Multi-View Stereo Reconstruction")
     print("=" * 60)
     
-    # 1. Paths
+    # 1. Paths (all resolved to absolute — pycolmap rejects paths with '..')
     script_dir = Path(__file__).resolve().parent
-    image_dir = script_dir / "../data/scene"
-    sparse_dir = script_dir / "../outputs/sparse/0" # COLMAP saves the best model in the '0' subfolder
+    image_dir = (script_dir / "../data/scene").resolve()
+    sparse_dir = (script_dir / "../outputs/sparse/0").resolve()
     if not sparse_dir.exists():
-        sparse_dir = script_dir / "../outputs/sparse"
+        sparse_dir = (script_dir / "../outputs/sparse").resolve()
     
-    dense_dir = script_dir / "../outputs/dense"
+    dense_dir = (script_dir / "../outputs/dense").resolve()
     dense_dir.mkdir(parents=True, exist_ok=True)
     
     if not sparse_dir.exists():

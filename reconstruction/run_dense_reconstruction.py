@@ -117,7 +117,7 @@ def run_dense():
     print(f"Dense point cloud saved to: {dense_dir}/fused.ply")
     print(f"Total dense points: {num_points:,} (vs 4,164 sparse)")
     print(f"\nView with:")
-    print(f"  LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libstdc++.so.6 python view_dense.py")
+    print(f"  LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libstdc++.so.6 python3 visualization/view_dense.py")
 
 if __name__ == "__main__":
     run_dense()

@@ -49,28 +49,56 @@ def run_dense():
     print("Undistortion complete!")
     
     # 3. Patch-Match Stereo
-    # For each image, COLMAP looks at overlapping images and calculates
-    # depth at every single pixel by comparing tiny image patches.
-    # This produces a dense depth map (millions of 3D points) per image.
-    print("\n--- STEP 2: Patch-Match Stereo (SLOW - CPU MODE) ---")
+    print("\n--- STEP 2: Patch-Match Stereo ---")
     print("Calculating depth at every pixel for all 38 images...")
-    print("On CPU this takes a long time. Progress logs will appear below.")
-    print("DO NOT close this terminal.\n")
     
-    pycolmap.patch_match_stereo(
-        workspace_path=dense_dir,
-    )
-    print("Patch-Match Stereo complete!")
+    import subprocess, shutil
+    colmap_bin = shutil.which("colmap")
     
+    try:
+        pycolmap.patch_match_stereo(
+            workspace_path=dense_dir,
+        )
+        print("Patch-Match Stereo complete via pycolmap!")
+    except Exception as e:
+        print(f"\n[NOTICE] pycolmap Python wheel reported: {e}")
+        if colmap_bin:
+            print(f"Found system COLMAP CLI binary at '{colmap_bin}'. Attempting CUDA Dense Reconstruction via system COLMAP...")
+            cmd = [colmap_bin, "patch_match_stereo", "--workspace_path", str(dense_dir)]
+            subprocess.run(cmd, check=True)
+            print("Patch-Match Stereo complete via system COLMAP CLI!")
+        else:
+            print("\n[ERROR] Neither pycolmap wheel nor system 'colmap' CLI binary has CUDA enabled.")
+            print("To fix this on Linux:")
+            print("  1. Check if NVIDIA driver & CUDA are active: nvidia-smi")
+            print("  2. If system colmap is installed, check: colmap -h")
+            print("  3. Or run dense stereo using system colmap binary with CUDA.")
+            return
+
     # 4. Stereo Fusion
-    # Merges all individual depth maps into one unified dense colored point cloud.
     print("\n--- STEP 3: Stereo Fusion ---")
     print("Merging all depth maps into a single dense point cloud...")
     
-    pycolmap.stereo_fusion(
-        output_path=dense_dir / "fused.ply",
-        workspace_path=dense_dir,
-    )
+    fused_ply_path = dense_dir / "fused.ply"
+    try:
+        pycolmap.stereo_fusion(
+            output_path=fused_ply_path,
+            workspace_path=dense_dir,
+        )
+        print("Stereo Fusion complete via pycolmap!")
+    except Exception as e:
+        if colmap_bin:
+            print(f"Attempting Stereo Fusion via system COLMAP CLI...")
+            cmd = [
+                colmap_bin, "stereo_fusion",
+                "--workspace_path", str(dense_dir),
+                "--output_path", str(fused_ply_path)
+            ]
+            subprocess.run(cmd, check=True)
+            print("Stereo Fusion complete via system COLMAP CLI!")
+        else:
+            print(f"[ERROR] Stereo fusion failed: {e}")
+            return
     
     # Count points in the final cloud
     with open(dense_dir / "fused.ply", 'rb') as f:

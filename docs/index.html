@@ -329,14 +329,160 @@ v = f_y * y' + c_y</code></pre>
         </article>
 
         <article class="content-section">
-            <h2>9. Conclusions & Next Steps</h2>
+            <h2>9. Dataset Trial 2: Cat Doll Scene Reconstruction</h2>
             <div class="technical-meta">
-                <span class="label">STATUS: PIPELINE COMPLETE</span>
+                <span class="label">TARGET: TEXTURED CAT DOLL</span>
+                <span class="label">DATASET: 81 IMAGES</span>
+                <span class="label">REF LENGTH: 37.5 CM</span>
+                <span class="label">DENSE POINTS: 1,676,815</span>
+                <span class="label">GPU TIME: 22.810 MIN</span>
             </div>
-            <p>The core objective of Week 2—building a comprehensive, mathematically sound Real-to-Sim observation pipeline—has been fully achieved. The system successfully calibrates optics, solves sparse tracking, scales to metric units, generates dense depth maps via GPU acceleration, and reconstructs a solid simulation mesh.</p>
+
+            <p>To eliminate the specular reflectance artifacts observed during Trial 1 (rigid LEGO block), I conducted a second empirical reconstruction trial. The second target was a plush cat doll with high-contrast, multi-colored surface texture and diffuse reflectance characteristics.</p>
+
+            <div class="image-grid single">
+                <div class="img-frame">
+                    <img src="assets/cat_doll_scene.jpeg" alt="Cat Doll Scene Orbital Capture" loading="lazy">
+                    <p style="text-align:center; font-size: 0.85rem; margin-top: 0.5rem; opacity: 0.8;">Dataset 2 Reference Frame: Textured cat doll scene with ground scale reference.</p>
+                </div>
+            </div>
+
+            <h3>9.1 Data Acquisition Protocol</h3>
+            <p>I collected <strong>81 multi-view RGB images</strong> around the cat doll using a multi-tier orbital trajectory. Key acquisition parameters:</p>
             <ul>
-                <li><strong>Dataset Quality Optimization:</strong> While the pipeline functions flawlessly, the physical properties of LEGO blocks (highly specular, non-textured) proved suboptimal for photogrammetry. The immediate next step is to run the exact same pipeline on a matte, highly textured object (e.g., a patterned shoe or plush toy) to demonstrate high-fidelity geometric recovery.</li>
-                <li><strong>Physics Simulator Integration:</strong> Load the generated URDF asset into a PyBullet or MuJoCo environment and verify physical collision properties, mass distribution, and gravity interaction.</li>
+                <li><strong>Angular Spacing:</strong> 5° to 10° increments around 360° of azimuth.</li>
+                <li><strong>Elevation Tiers:</strong> Low-angle (horizontal), medium-angle (30° elevation), and high-angle (60° elevation) passes.</li>
+                <li><strong>Overlap Ratio:</strong> Maintained 75% to 85% visual overlap between adjacent camera frames.</li>
+                <li><strong>Scale Reference:</strong> Recorded the real-world physical dimension of <strong>37.5 cm (0.375 m)</strong> in <code>data/scene/measurement.txt</code> as the metric baseline.</li>
+            </ul>
+
+            <h3>9.2 Observations: Sparse Structure from Motion (SfM)</h3>
+            <p>I executed <code>run_reconstruction.py</code> across the 81-image dataset. The following technical observations were recorded:</p>
+            <ul>
+                <li><strong>Keypoint Distribution:</strong> In Trial 1, SIFT feature extraction clustered heavily on the background notebook due to the untextured plastic surfaces of the LEGO. In Trial 2, SIFT feature extraction established dense keypoints directly on the object body, including fabric stitching, facial features, whiskers, fur texture, and stripes.</li>
+                <li><strong>Epipolar Track Connectivity:</strong> Exhaustive feature matching across all 81 images established robust two-view and multi-view tracks without track loss.</li>
+                <li><strong>Pose Estimation Stability:</strong> PyCOLMAP incremental mapping converged successfully across the multi-altitude camera poses. The bundle adjustment step maintained stable residual convergence without camera drift.</li>
+            </ul>
+
+            <h3>9.3 Observations: Dense Reconstruction (CUDA Patch-Match & Stereo Fusion)</h3>
+            <p>I executed <code>run_dense_reconstruction.py</code> on the CUDA-accelerated GPU workstation. The dense processing stages yielded the following operational metrics:</p>
+
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Dense Stage</th>
+                        <th>Execution Engine</th>
+                        <th>Processed Units</th>
+                        <th>Elapsed Time</th>
+                        <th>Throughput</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Image Undistortion</td>
+                        <td>PyCOLMAP (CPU / I/O)</td>
+                        <td>81 images</td>
+                        <td>~15 sec</td>
+                        <td>5.4 img/s</td>
+                    </tr>
+                    <tr>
+                        <td>Patch-Match Stereo</td>
+                        <td>CUDA GPU (RTX 5070 Ti)</td>
+                        <td>81 views (Depth + Normal)</td>
+                        <td>22.810 min (1,368.6 s)</td>
+                        <td>16.9 s / img</td>
+                    </tr>
+                    <tr>
+                        <td>Stereo Fusion</td>
+                        <td>COLMAP Fusion (CPU / RAM)</td>
+                        <td>81 depth maps</td>
+                        <td>0.169 min (10.14 s)</td>
+                        <td>165,366 pts / s</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Total Dense Pipeline</strong></td>
+                        <td><strong>End-to-End</strong></td>
+                        <td><strong>81 Views → Fused Cloud</strong></td>
+                        <td><strong>22.979 min (1,378.7 s)</strong></td>
+                        <td><strong>1,676,815 points</strong></td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <p><strong>Technical Analysis of Dense Surface Quality:</strong></p>
+            <ul>
+                <li><strong>Lambertian Reflectance Compliance:</strong> The fabric surface obeys diffuse Lambertian reflectance. Unlike the LEGO plastic, view-dependent specular highlights were absent. Consequently, the photometric Normalized Cross-Correlation (NCC) cost volume showed clear, unambiguous minima during PatchMatch plane sweeps.</li>
+                <li><strong>Void Elimination:</strong> Stereo fusion generated a continuous volumetric surface across the head, torso, and limbs of the cat doll. The hollow geometry and surface holes observed in Trial 1 did not recur.</li>
+                <li><strong>Point Density Expansion:</strong> The fused dense cloud reached <strong>1,676,815 points</strong>, representing a <strong>14.6× increase (1,362% expansion)</strong> over the 114,675 points obtained in Trial 1.</li>
+            </ul>
+
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Reconstruction Metric</th>
+                        <th>Trial 1 (LEGO Block)</th>
+                        <th>Trial 2 (Cat Doll)</th>
+                        <th>Factor Change</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Input Image Count</td>
+                        <td>38 frames</td>
+                        <td>81 frames</td>
+                        <td>+113%</td>
+                    </tr>
+                    <tr>
+                        <td>Surface Material</td>
+                        <td>Specular, Smooth Plastic</td>
+                        <td>Diffuse, High-Texture Fabric</td>
+                        <td>Material Upgrade</td>
+                    </tr>
+                    <tr>
+                        <td>Sparse Features on Object</td>
+                        <td>Low (&lt; 15% on object)</td>
+                        <td>High (&gt; 70% on object)</td>
+                        <td>Significant improvement</td>
+                    </tr>
+                    <tr>
+                        <td>Patch-Match Compute Time</td>
+                        <td>~3.2 min (Subsample)</td>
+                        <td>22.810 min</td>
+                        <td>High-res depth volume</td>
+                    </tr>
+                    <tr>
+                        <td>Stereo Fusion Time</td>
+                        <td>~2 sec</td>
+                        <td>10.14 sec (0.169 min)</td>
+                        <td>Robust consistency check</td>
+                    </tr>
+                    <tr>
+                        <td>Dense Point Count</td>
+                        <td>114,675 points</td>
+                        <td><strong>1,676,815 points</strong></td>
+                        <td><strong>14.6× Density Increase</strong></td>
+                    </tr>
+                    <tr>
+                        <td>Surface Continuity</td>
+                        <td>Holes due to specular reflection</td>
+                        <td>Continuous, solid volume</td>
+                        <td>Simulation-grade geometry</td>
+                    </tr>
+                </tbody>
+            </table>
+        </article>
+
+        <article class="content-section">
+            <h2>10. Conclusions & Next Steps</h2>
+            <div class="technical-meta">
+                <span class="label">STATUS: VALIDATED AT SCALE</span>
+                <span class="label">TARGET: 1.67M DENSE POINTS</span>
+            </div>
+            <p>The Real-to-Sim visual reconstruction pipeline has been validated across both rigid geometric benchmarks and organic textured objects. The transition from Trial 1 to Trial 2 confirms that photogrammetric precision depends critically on surface material reflectance and multi-altitude visual overlap.</p>
+            <ul>
+                <li><strong>Material Validation:</strong> High-frequency texture and diffuse surfaces allow CUDA PatchMatch Stereo to resolve dense depth maps with sub-pixel consistency, scaling the point cloud to 1.68 million points.</li>
+                <li><strong>Computational Scalability:</strong> The CUDA-accelerated MVS pipeline maintained an average processing throughput of 16.9 seconds per view, completing dense reconstruction of 81 images in under 23 minutes.</li>
+                <li><strong>Next Phase (Simulation Integration):</strong> Apply Poisson surface meshing to the 1.67M point cloud, apply Sim3d metric scaling from the 37.5 cm reference baseline, and generate the final URDF kinematic model for PyBullet/MuJoCo robot simulation.</li>
             </ul>
         </article>
 

@@ -1,1 +1,1 @@
-width: 6.5cm, height: 3cm
+lenght: 37.5 cm

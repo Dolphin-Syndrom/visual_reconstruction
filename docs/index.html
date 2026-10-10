@@ -53,9 +53,15 @@
             </div>
             <p>To eliminate optical distortion and establish an accurate pinhole projection model, I conducted camera calibration using a planar checkerboard target. The physical target comprised 19 horizontal by 6 vertical internal corners, yielding 114 corner intersections per frame.</p>
 
-            <div class="image-grid">
-                <div class="img-frame"><img src="assets/calib1.jpeg" alt="Calibration sample 1" loading="lazy"></div>
-                <div class="img-frame"><img src="assets/calib2.jpeg" alt="Calibration sample 2" loading="lazy"></div>
+            <div class="image-grid large">
+                <div class="img-frame">
+                    <img src="assets/calib1.jpeg" alt="Calibration sample 1" loading="lazy">
+                    <p class="img-caption">Figure 2.1: Planar Checkerboard Calibration Frame 1 — Sub-pixel corner detection across 114 internal intersections.</p>
+                </div>
+                <div class="img-frame">
+                    <img src="assets/calib2.jpeg" alt="Calibration sample 2" loading="lazy">
+                    <p class="img-caption">Figure 2.2: Planar Checkerboard Calibration Frame 2 — Angled orientation for focal length and radial distortion optimization.</p>
+                </div>
             </div>
 
             <p>I captured 14 calibration frames spanning varied orientations (pitch, roll, yaw) and working distances. Keypoint corners were detected using <code>cv2.findChessboardCorners()</code> and refined to sub-pixel accuracy with <code>cv2.cornerSubPix()</code> using an 11x11 pixel search window (termination criteria: 30 iterations or ε = 0.001).</p>
@@ -121,8 +127,11 @@
             </div>
             <p>For the 3D target, I selected a rigid LEGO block. To prevent feature track loss caused by homogeneous untextured surfaces, I positioned the object on a handwritten notebook, introducing high-frequency visual background context.</p>
 
-            <div class="image-grid single">
-                <div class="img-frame"><img src="assets/lego_scene.jpeg" alt="LEGO object orbital scene" loading="lazy"></div>
+            <div class="image-grid large">
+                <div class="img-frame">
+                    <img src="assets/lego_scene.jpeg" alt="LEGO object orbital scene" loading="lazy">
+                    <p class="img-caption">Figure 3.1: Trial 1 Rigid LEGO Target Scene — Orbital acquisition with 6.5 cm ground-truth reference baseline.</p>
+                </div>
             </div>
 
             <p>I collected 38 orbital images around the object at approximately 10-degree increments, maintaining 70-80% visual overlap across adjacent frames. I recorded the primary physical length of the LEGO object (<strong>6.5 cm / 0.065 m</strong>) in <code>data/scene/measurement.txt</code> as the ground truth scale anchor.</p>
@@ -143,8 +152,11 @@
                 <li><strong>Incremental Mapping & Bundle Adjustment:</strong> Estimated camera extrinsics (Rotation R, Translation t) while triangulating 3D point positions via Levenberg-Marquardt non-linear optimization.</li>
             </ul>
 
-            <div class="image-grid single">
-                <div class="img-frame"><img src="assets/open3d.jpeg" alt="Open3D Sparse Point Cloud Visualization" loading="lazy"></div>
+            <div class="image-grid large">
+                <div class="img-frame">
+                    <img src="assets/open3d.jpeg" alt="Open3D Sparse Point Cloud Visualization" loading="lazy">
+                    <p class="img-caption">Figure 4.1: Open3D Sparse Point Cloud (4,164 points) — Triangulated SIFT landmarks across 37 registered frames.</p>
+                </div>
             </div>
 
             <p><strong>Technical Analysis of Open3D Model Visualization:</strong></p>
@@ -210,8 +222,11 @@ Scale Factor = 1.3803 cm / unit</code></pre>
 u = f_x * x' + c_x
 v = f_y * y' + c_y</code></pre>
 
-            <div class="image-grid single">
-                <div class="img-frame"><img src="assets/reprojection.jpg" alt="Reprojection validation result" loading="lazy"></div>
+            <div class="image-grid large">
+                <div class="img-frame">
+                    <img src="assets/reprojection.jpg" alt="Reprojection validation result" loading="lazy">
+                    <p class="img-caption">Figure 5.1: 2D/3D Reprojection Verification Overlay — 765 landmarks evaluated with 0.9624 px mean residual error.</p>
+                </div>
             </div>
 
             <p>I selected the source image with the highest number of observed 3D correspondences (765 visible 3D points) and reprojected their world coordinates back onto the 2D frame. The reprojected coordinates (green dots with white outlines) overlay the physical features in the photograph.</p>
@@ -276,18 +291,18 @@ v = f_y * y' + c_y</code></pre>
 
             <h3>Visual Results: Sparse vs. Dense</h3>
             
-            <div class="image-grid vertical">
+            <div class="image-grid large">
                 <div class="img-frame">
                     <img src="assets/sparse_2455.png" alt="Sparse Reconstruction (2,455 points)" loading="lazy">
-                    <p style="text-align:center; font-size: 0.85rem; margin-top: 0.5rem; opacity: 0.8;">Sparse SfM: 2,455 points (Scattered features)</p>
+                    <p class="img-caption">Figure 6.1: Sparse SfM (2,455 points) — Scattered background features and missing solid surfaces.</p>
                 </div>
                 <div class="img-frame">
                     <img src="assets/dense_114675.png" alt="Dense Reconstruction (114,675 points)" loading="lazy">
-                    <p style="text-align:center; font-size: 0.85rem; margin-top: 0.5rem; opacity: 0.8;">Dense MVS: 114,675 points (Dark background)</p>
+                    <p class="img-caption">Figure 6.2: Dense MVS (114,675 points) — Point cloud rendered on dark background showing reconstructed volume.</p>
                 </div>
                 <div class="img-frame">
                     <img src="assets/open3d_dense.png" alt="Dense Reconstruction Open3D View" loading="lazy">
-                    <p style="text-align:center; font-size: 0.85rem; margin-top: 0.5rem; opacity: 0.8;">Dense MVS: Open3D Renderer (Clear structural volume)</p>
+                    <p class="img-caption">Figure 6.3: Dense MVS Open3D Viewer — Structural geometry and surface normal orientation.</p>
                 </div>
             </div>
 
@@ -307,8 +322,11 @@ v = f_y * y' + c_y</code></pre>
             
             <p>To establish this vector field, I first estimated robust surface normals for all 114k points utilizing a KD-Tree search architecture (K-Nearest Neighbors, K=50) to compute local covariance matrices and their corresponding eigenvectors. The Poisson algorithm then wrapped a continuous mathematical "skin" over the oriented points utilizing an adaptive octree grid at <strong>Depth=9</strong>. At depth 9, the bounding volume is partitioned into a high-resolution <code>2^9 × 2^9 × 2^9</code> (512³) voxel grid, allowing fine detail preservation while effectively bridging the specular voids.</p>
 
-            <div class="image-grid single">
-                <div class="img-frame"><img src="assets/poisson_mesh.png" alt="Poisson Surface Mesh" loading="lazy"></div>
+            <div class="image-grid large">
+                <div class="img-frame">
+                    <img src="assets/poisson_mesh.png" alt="Poisson Surface Mesh" loading="lazy">
+                    <p class="img-caption">Figure 7.1: Trial 1 Poisson Solid Surface Mesh — Octree Depth 9 watertight surface reconstruction.</p>
+                </div>
             </div>
 
             <p>To finalize the mesh, I implemented a density-based filtering mask that trims the lowest 10% of extrapolated vertices, removing the infinite "bubble" artifact commonly produced by the Poisson equation. The resulting mesh is a mathematically closed surface ready for simulation.</p>
@@ -342,10 +360,10 @@ v = f_y * y' + c_y</code></pre>
 
             <p>To eliminate the specular reflectance artifacts observed during Trial 1 (rigid LEGO block), I conducted a second empirical reconstruction trial. The second target was a plush cat doll with high-contrast, multi-colored surface texture and diffuse reflectance characteristics.</p>
 
-            <div class="image-grid single">
+            <div class="image-grid large">
                 <div class="img-frame">
                     <img src="assets/cat_doll_scene.jpeg" alt="Cat Doll Scene Orbital Capture" loading="lazy">
-                    <p style="text-align:center; font-size: 0.85rem; margin-top: 0.5rem; opacity: 0.8;">Dataset 2 Reference Frame: Textured cat doll scene with ground scale reference.</p>
+                    <p class="img-caption">Figure 9.1: Dataset 2 Target Scene — Plush cat doll with diffuse surface texture and 37.5 cm ground scale reference.</p>
                 </div>
             </div>
 

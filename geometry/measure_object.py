@@ -144,37 +144,49 @@ def segment_object_from_floor(pcd, plane_dist=1.0, min_height=0.5, max_height=35
 
     print(f"Extracted {len(non_floor_cloud.points):,} candidate points above floor.")
 
-    print("\n--- Step 3: DBSCAN Clustering to Isolate Cat Doll ---")
-    # Group remaining non-floor points into clusters to discard walls or distant background
-    labels = np.array(non_floor_cloud.cluster_dbscan(eps=eps, min_points=40, print_progress=False))
+    print("\n--- Step 3: Fast Voxel Downsampling & DBSCAN Clustering ---")
+    # Clustering 300K+ points directly consumes excessive memory and causes process termination.
+    # We downsample candidate points with a 5mm voxel grid for ultra-fast, memory-safe clustering:
+    pcd_down = non_floor_cloud.voxel_down_sample(voxel_size=0.5)
+    print(f"Downsampled candidate points to {len(pcd_down.points):,} points for lightweight clustering.")
+
+    # Group downsampled points into spatial clusters
+    labels = np.array(pcd_down.cluster_dbscan(eps=eps, min_points=25, print_progress=False))
     unique_labels = [l for l in np.unique(labels) if l != -1]
 
     if len(unique_labels) == 0:
-        print("[WARNING] DBSCAN found no distinct clusters. Retaining candidate points.")
+        print("[WARNING] DBSCAN found no distinct clusters. Using candidate points.")
         cat_pcd = non_floor_cloud
     else:
-        # Find the cluster with the highest point density near the scene center
+        # Find the cluster with highest point density near the scene center
         scene_center = np.mean(pts, axis=0)
         best_label = None
         best_score = -1
 
         for l in unique_labels:
             cluster_idx = np.where(labels == l)[0]
-            cluster_pts = np.asarray(non_floor_cloud.select_by_index(cluster_idx).points)
+            cluster_pts = np.asarray(pcd_down.select_by_index(cluster_idx).points)
             cluster_size = len(cluster_pts)
-            # Distance from cluster center to scene center
+            # Distance from cluster centroid to scene center
             dist_to_center = np.linalg.norm(np.mean(cluster_pts, axis=0) - scene_center)
-            # Score favors large clusters closer to the capture center
-            score = cluster_size / (1.0 + 0.05 * dist_to_center)
+            # Score favors large clusters located near the capture trajectory center
+            score = cluster_size / (1.0 + 0.04 * dist_to_center)
 
-            if score > best_score and cluster_size > 500:
+            if score > best_score and cluster_size > 150:
                 best_score = score
                 best_label = l
 
         if best_label is not None:
-            cat_indices = np.where(labels == best_label)[0]
-            cat_pcd = non_floor_cloud.select_by_index(cat_indices)
-            print(f"Isolated Cat Doll cluster (ID {best_label}) with {len(cat_pcd.points):,} points.")
+            cat_down_indices = np.where(labels == best_label)[0]
+            cat_pcd_down = pcd_down.select_by_index(cat_down_indices)
+
+            # Fit tight oriented bounding box around the downsampled cluster and expand slightly by 8%
+            obb_guide = cat_pcd_down.get_oriented_bounding_box()
+            obb_guide.scale(1.08, obb_guide.center)
+
+            # Crop the original full-density point cloud using the oriented bounding box
+            cat_pcd = non_floor_cloud.crop(obb_guide)
+            print(f"Isolated Cat Doll cluster (ID {best_label}) — recovered {len(cat_pcd.points):,} full-resolution points.")
         else:
             cat_pcd = non_floor_cloud
 
